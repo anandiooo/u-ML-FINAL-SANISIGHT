@@ -68,22 +68,39 @@ def generate_correlation_interpretation(df, target_col, features, config):
 def generate_simulation_delta(baseline_inputs, current_inputs, current_result, config):
     """Produces a what-if comparison narrative between baseline and current simulation."""
 
-    # Identify what changed
+    FEATURE_LABELS = {
+        "kepadatan_penduduk": "Kepadatan Penduduk",
+        "pct_tanpa_sanitasi": "% Tanpa Sanitasi",
+        "pct_tanpa_air_bersih": "% Tanpa Air Bersih",
+        "volume_sampah_harian": "Volume Sampah Harian",
+        "curah_hujan_mm": "Curah Hujan",
+        "indeks_kualitas_air": "Indeks Kualitas Air",
+        "jumlah_faskes_per_1000": "Faskes per 1.000",
+    }
+
+    # Identify what changed (ignore tiny differences from float rounding)
     changes = []
     for k, v in current_inputs.items():
         base_v = baseline_inputs.get(k, v)
-        if base_v != v:
+        if abs(v - base_v) > 0.01:
             direction = "meningkat" if v > base_v else "menurun"
-            changes.append(f"{k.replace('_', ' ')} {direction} dari {base_v:.1f} menjadi {v:.1f}")
+            display_name = FEATURE_LABELS.get(k, k.replace("_", " ").title())
+            pct_change = abs(v - base_v) / (abs(base_v) + 1e-5) * 100
+            changes.append(
+                f"**{display_name}** {direction} dari {base_v:.1f} → {v:.1f} "
+                f"({pct_change:.0f}%)"
+            )
 
     if not changes:
         return ""
 
-    changes_str = ", ".join(changes)
+    changes_str = "<br>• ".join(changes)
     risk_label = current_result.loc[0, "predicted_label"]
 
     return (
-        f"**Skenario Simulasi (What-If):** Anda mengubah simulasi di mana {changes_str}. "
+        f"<strong>Skenario Simulasi (What-If):</strong><br>"
+        f"Perubahan parameter yang Anda lakukan:<br>• {changes_str}<br><br>"
         f"Berdasarkan perubahan kondisi lingkungan ini, model memprediksi wilayah ini akan masuk ke kategori "
-        f"**{risk_label}**. Ini membantu pemerintah daerah mengantisipasi dampak sebelum krisis terjadi."
+        f"<strong>{risk_label}</strong>. Informasi ini membantu pemerintah daerah mengantisipasi dampak "
+        f"sebelum krisis terjadi."
     )

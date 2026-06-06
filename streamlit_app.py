@@ -563,15 +563,61 @@ def page_train_eval():
 def page_spatial_map():
     page_header("Analisis Spasial", "Peta Risiko & Simulasi Skenario")
 
-    col_map, col_sim = st.columns([3, 1], gap="large")
+    col_map, col_sim = st.columns([70, 30], gap="large")
+
+    with col_sim:
+        sim_data = render_simulation(config, df, artifacts)
 
     with col_map:
         if artifacts is None:
             ibox("<strong>Model belum dilatih.</strong><br>Silakan latih model terlebih dahulu.", kind="warn")
+
+        # Build a custom map that includes the simulation point
         render_heatmap(config, df_view)
 
-    with col_sim:
-        render_simulation(config, df, artifacts)
+        # Combined Simulation Results & Interpretation Box
+        if sim_data is not None:
+            result = sim_data["result"]
+            delta_text = sim_data["delta_text"]
+            pred_class = int(result.loc[0, "predicted_class"])
+            pred_label = result.loc[0, "predicted_label"]
+            prob = result.loc[0, "predicted_probability"]
+
+            risk_colors = config.get("risk_colors", {0: "#10b981", 1: "#f59e0b", 2: "#ef4444"})
+            color = risk_colors.get(pred_class, "#94a3b8")
+            kind_class = {0: "ok-box", 1: "warn-box", 2: "risk-box"}.get(pred_class, "interp-box")
+
+            html_content = f"""
+            <div class="{kind_class}" style="margin-top: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                    <span style="font-size: 1.1rem; font-weight: 600; color: var(--text-main);">Hasil Simulasi Risiko & Analisis Dampak</span>
+                    <span style="background: {color}20; color: {color}; border: 1px solid {color}; border-radius: 20px; padding: 0.2rem 0.8rem; font-size: 0.85rem; font-weight: bold; text-transform: uppercase;">
+                        {pred_label}
+                    </span>
+                </div>
+                <div style="font-size: 0.95rem; color: var(--text-main);">
+                    Tingkat risiko kesehatan wilayah yang disimulasikan diprediksi berada pada kategori 
+                    <strong style="color: {color};">{pred_label}</strong> dengan tingkat keyakinan (confidence) sebesar <strong>{prob:.2%}</strong>.
+                </div>
+            """
+
+            if delta_text:
+                html_content += f"""
+                <hr style="border: 0; border-top: 1px solid var(--border); margin: 0.75rem 0;">
+                <div style="font-size: 0.9rem; line-height: 1.6; color: var(--text-main);">
+                    {delta_text}
+                </div>
+                """
+            else:
+                html_content += f"""
+                <hr style="border: 0; border-top: 1px solid var(--border); margin: 0.75rem 0;">
+                <div style="font-size: 0.9rem; line-height: 1.6; color: var(--text-muted); font-style: italic;">
+                    Semua parameter berada pada nilai rata-rata (baseline). Ubah nilai parameter pada slider di sebelah kanan untuk menganalisis skenario alternatif (What-If).
+                </div>
+                """
+
+            html_content += "</div>"
+            st.markdown(html_content, unsafe_allow_html=True)
 
 
 pg = st.navigation([

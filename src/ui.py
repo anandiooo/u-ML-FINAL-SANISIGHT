@@ -32,14 +32,14 @@ def fl(name):
 
 def build_risk_map(df, config):
     geojson_path = config["paths"].get("geojson")
-    center_lat = -6.1
+    center_lat = -6.2
     center_lon = 106.9
 
     risk_colors = config.get("risk_colors", {})
     risk_labels = config.get("risk_labels", {})
     risk_by_region = dict(zip(df.get("region_id", []), df.get("predicted_class", [])))
 
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles="cartodbpositron")
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=11, tiles="cartodbpositron")
 
     if geojson_path and Path(geojson_path).exists():
         with Path(geojson_path).open("r", encoding="utf-8") as f:
@@ -122,7 +122,7 @@ def render_dashboard(config, df, metrics=None):
         c2.metric("Precision", f"{metrics.get('macro_precision', 0):.3f}")
         c3.metric("Recall", f"{metrics.get('macro_recall', 0):.3f}")
         c4.metric("Micro F1", f"{metrics.get('micro_f1', 0):.3f}")
-        
+
         # Interpretation
         macro_f1 = metrics.get('macro_f1', 0)
         perf_text = "Sangat Baik" if macro_f1 > 0.8 else ("Baik" if macro_f1 > 0.6 else "Perlu Ditingkatkan")
@@ -138,28 +138,28 @@ def render_heatmap(config, df):
     st.markdown('<div class="section-heading">Peta Risiko Keruangan (Spatial Risk Heatmap)</div>', unsafe_allow_html=True)
     map_obj = build_risk_map(df, config)
     st.components.v1.html(map_obj.get_root().render(), height=520)
-    
+
     # Interpretation
     risk_col = "predicted_label" if "predicted_label" in df.columns else "risk_class"
-    
+
     # Check if this is the full dataframe or just simulation
     if len(df) > 1:
         # Check distribution for map interpretation
         counts = df[risk_col].value_counts()
         total = len(df)
-        
+
         # Determine dominant risk
         if not counts.empty:
             dominant_risk = counts.idxmax()
             pct = (counts.max() / total) * 100
-            
+
             # Use mapping to ensure we have string representation if it's numeric
             if isinstance(dominant_risk, (int, float)):
                 risk_map = {0: "Risiko Rendah", 1: "Risiko Sedang", 2: "Risiko Tinggi"}
                 dominant_str = risk_map.get(int(dominant_risk), str(dominant_risk))
             else:
                 dominant_str = str(dominant_risk)
-                
+
             st.markdown(
                 f"<div class='interp-box'><strong>Interpretasi Peta Otomatis:</strong> Secara keseluruhan wilayah didominasi oleh kategori "
                 f"**{dominant_str}** yang mencakup {pct:.1f}% dari area pada dataset saat ini. "
@@ -173,35 +173,39 @@ def render_simulation(config, df, artifacts):
 
     if artifacts is None:
         st.warning("Latih model terlebih dahulu untuk mengaktifkan simulasi.")
-        return
+        return None
 
     features = config["features"]
-    defaults = df[features].median(numeric_only=True)
+    baseline_inputs = df[features].median(numeric_only=True).to_dict()
 
     sim_inputs = {}
     for feature in features:
         mean_val = float(df[feature].mean()) if feature in df.columns else 0.0
         min_val = float(df[feature].min()) if feature in df.columns else -100.0
         max_val = float(df[feature].max()) if feature in df.columns else 10000.0
-        sim_inputs[feature] = st.slider(fl(feature), min_value=min_val, max_value=max_val, value=mean_val, format="%.2f", key=f"sim_{feature}")
-
-    if st.button("Run Simulation", type="primary"):
-        sample = pd.DataFrame([sim_inputs])
-        result = predict_risk(sample, config, artifacts)
-        label = result.loc[0, "predicted_label"]
-        prob = result.loc[0, "predicted_probability"]
-
-        st.markdown(
-            f"<div class='interp-box'><strong>Prediksi Risiko:</strong> {label}<br>"
-            f"Kepercayaan (Confidence): {prob:.2f}</div>",
-            unsafe_allow_html=True,
+        sim_inputs[feature] = st.slider(
+            fl(feature),
+            min_value=min_val,
+            max_value=max_val,
+            value=mean_val,
+            format="%.2f",
+            key=f"sim_{feature}",
         )
-        
-        from src.interpretation import generate_simulation_delta
-        baseline_inputs = df[features].median(numeric_only=True).to_dict()
-        delta_text = generate_simulation_delta(baseline_inputs, sim_inputs, result, config)
-        if delta_text:
-            st.markdown(f"<div class='warn-box'>{delta_text}</div>", unsafe_allow_html=True)
+
+    # ── Reactive prediction (no button needed) ──
+    sample = pd.DataFrame([sim_inputs])
+    result = predict_risk(sample, config, artifacts)
+
+    # ── Delta interpretation ──
+    from src.interpretation import generate_simulation_delta
+    delta_text = generate_simulation_delta(baseline_inputs, sim_inputs, result, config)
+
+    return {
+        "result": result,
+        "sim_inputs": sim_inputs,
+        "baseline_inputs": baseline_inputs,
+        "delta_text": delta_text
+    }
 
 
 def render_data(config, df):
@@ -243,7 +247,7 @@ def render_data(config, df):
         )
         fig.update_layout(legend_title="Status", margin=dict(t=40, b=20))
         st.plotly_chart(fig, use_container_width=True)
-        
+
         from src.interpretation import generate_eda_interpretation
         interp_text = generate_eda_interpretation(feature, df, target_col, config)
         if interp_text:
@@ -287,7 +291,7 @@ def render_data(config, df):
         )
         fig_heat.update_layout(margin=dict(t=40, b=20))
         st.plotly_chart(fig_heat, use_container_width=True)
-        
+
         from src.interpretation import generate_correlation_interpretation
         corr_text = generate_correlation_interpretation(df_plot, target_col, features, config)
         if corr_text:
