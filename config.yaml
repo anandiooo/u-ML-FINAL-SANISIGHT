@@ -1,5 +1,5 @@
 project:
-  name: "SaniSight AI"
+  name: "SaniSight"
   version: "2.0"
   data_path: "data/processed/water_quality.csv"
   geojson_path: "data/raw/regions.geojson"

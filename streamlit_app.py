@@ -187,6 +187,27 @@ from src.ui import (
     render_simulation,
 )
 
+FEATURE_LABELS = {
+    "kepadatan_penduduk": "Kepadatan Penduduk (jiwa/km²)",
+    "pct_tanpa_sanitasi": "% Tanpa Sanitasi Layak",
+    "pct_tanpa_air_bersih": "% Tanpa Air Bersih",
+    "volume_sampah_harian": "Volume Sampah Harian (ton)",
+    "curah_hujan_mm": "Curah Hujan (mm)",
+    "indeks_kualitas_air": "Indeks Kualitas Air",
+    "jumlah_faskes_per_1000": "Faskes per 1.000 Penduduk",
+    "risk_class": "Kelas Risiko",
+    "kecamatan": "Kecamatan",
+    "latitude": "Latitude",
+    "longitude": "Longitude",
+    "periode": "Periode",
+    "kondisi": "Kondisi",
+}
+
+
+def fl(name):
+    """Get the display label for a feature name."""
+    return FEATURE_LABELS.get(name, name)
+
 
 def ibox(text, kind="info"):
     cls = {"info": "interp-box", "warn": "warn-box", "ok": "ok-box", "risk": "risk-box"}[kind]
@@ -277,6 +298,7 @@ def page_preprocessing():
             "Features to Include",
             features,
             default=features,
+            format_func=fl,
             help="Select which features to keep for modeling.",
         )
 
@@ -366,12 +388,13 @@ def page_preprocessing():
 
     # Data Preview
     st.markdown('<div class="section-heading">Data Preview (Processed)</div>', unsafe_allow_html=True)
-    st.dataframe(df_preview, use_container_width=True)
-    st.caption(f"Showing top 20 records of {len(df_preview):,} total.")
+    st.dataframe(df_preview.rename(columns=FEATURE_LABELS), use_container_width=True)
+    st.caption(f"Showing {len(df_preview):,} total records.")
 
     # Column Statistics
     st.markdown('<div class="section-heading">Column Statistics</div>', unsafe_allow_html=True)
-    st.dataframe(df_preview[num_cols].describe() if num_cols else df_preview.describe(), use_container_width=True)
+    stats_df = df_preview[num_cols].describe() if num_cols else df_preview.describe()
+    st.dataframe(stats_df.rename(columns=FEATURE_LABELS), use_container_width=True)
 
 
 def page_train_eval():

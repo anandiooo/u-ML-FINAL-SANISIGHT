@@ -8,6 +8,27 @@ import streamlit as st
 
 from src.modeling import predict_risk
 
+FEATURE_LABELS = {
+    "kepadatan_penduduk": "Kepadatan Penduduk (jiwa/km\u00b2)",
+    "pct_tanpa_sanitasi": "% Tanpa Sanitasi Layak",
+    "pct_tanpa_air_bersih": "% Tanpa Air Bersih",
+    "volume_sampah_harian": "Volume Sampah Harian (ton)",
+    "curah_hujan_mm": "Curah Hujan (mm)",
+    "indeks_kualitas_air": "Indeks Kualitas Air",
+    "jumlah_faskes_per_1000": "Faskes per 1.000 Penduduk",
+    "risk_class": "Kelas Risiko",
+    "kecamatan": "Kecamatan",
+    "latitude": "Latitude",
+    "longitude": "Longitude",
+    "periode": "Periode",
+    "kondisi": "Kondisi",
+}
+
+
+def fl(name):
+    """Get the display label for a feature name."""
+    return FEATURE_LABELS.get(name, name)
+
 
 def build_risk_map(df, config):
     geojson_path = config["paths"].get("geojson")
@@ -162,7 +183,7 @@ def render_simulation(config, df, artifacts):
         mean_val = float(df[feature].mean()) if feature in df.columns else 0.0
         min_val = float(df[feature].min()) if feature in df.columns else -100.0
         max_val = float(df[feature].max()) if feature in df.columns else 10000.0
-        sim_inputs[feature] = st.slider(feature, min_value=min_val, max_value=max_val, value=mean_val, format="%.2f")
+        sim_inputs[feature] = st.slider(fl(feature), min_value=min_val, max_value=max_val, value=mean_val, format="%.2f", key=f"sim_{feature}")
 
     if st.button("Run Simulation", type="primary"):
         sample = pd.DataFrame([sim_inputs])
@@ -206,18 +227,19 @@ def render_data(config, df):
 
     with tab_raw:
         st.caption(f"Menampilkan total {len(df):,} rekam data")
-        st.dataframe(df, use_container_width=True, height=400)
+        st.dataframe(df.rename(columns=FEATURE_LABELS), use_container_width=True, height=400)
 
     with tab_dist:
         col_ctrl, _ = st.columns([2, 3])
-        feature = col_ctrl.selectbox("Feature to inspect:", features, key="hist_feature")
+        feature = col_ctrl.selectbox("Feature to inspect:", features, format_func=fl, key="hist_feature")
         bins = col_ctrl.slider("Bin count:", 10, 60, 30, key="hist_bins")
 
         fig = px.histogram(
             df_plot, x=feature, nbins=bins,
             color=status_col, color_discrete_map=color_map, barmode="overlay",
             opacity=0.7,
-            title=f"Distribution of {feature} by Risk Status"
+            title=f"Distribution of {fl(feature)} by Risk Status",
+            labels={feature: fl(feature)},
         )
         fig.update_layout(legend_title="Status", margin=dict(t=40, b=20))
         st.plotly_chart(fig, use_container_width=True)
@@ -229,11 +251,12 @@ def render_data(config, df):
 
     with tab_target:
         col_ctrl2, _ = st.columns([2, 3])
-        box_feature = col_ctrl2.selectbox("Numeric feature:", features, key="box_feature")
+        box_feature = col_ctrl2.selectbox("Numeric feature:", features, format_func=fl, key="box_feature")
         fig_box = px.box(
             df_plot, x=status_col, y=box_feature,
             color=status_col, color_discrete_map=color_map,
-            title=f"{box_feature} vs Risk Status",
+            title=f"{fl(box_feature)} vs Risk Status",
+            labels={box_feature: fl(box_feature)},
             points="outliers",
         )
         fig_box.update_layout(showlegend=False, margin=dict(t=40, b=20))
@@ -241,22 +264,24 @@ def render_data(config, df):
 
     with tab_scatter:
         c1, c2 = st.columns(2)
-        x_axis = c1.selectbox("X axis:", features, index=0, key="sc_x")
-        y_axis = c2.selectbox("Y axis:", features, index=min(1, len(features)-1), key="sc_y")
+        x_axis = c1.selectbox("X axis:", features, index=0, format_func=fl, key="sc_x")
+        y_axis = c2.selectbox("Y axis:", features, index=min(1, len(features)-1), format_func=fl, key="sc_y")
 
         fig_sc = px.scatter(
             df_plot, x=x_axis, y=y_axis,
             color=status_col, color_discrete_map=color_map,
             opacity=0.6, size_max=6,
-            title=f"{x_axis} vs {y_axis}"
+            title=f"{fl(x_axis)} vs {fl(y_axis)}",
+            labels={x_axis: fl(x_axis), y_axis: fl(y_axis)},
         )
         fig_sc.update_layout(legend_title="Status", margin=dict(t=40, b=20))
         st.plotly_chart(fig_sc, use_container_width=True)
 
     with tab_corr:
         corr = df_plot[features + [target_col]].corr()
+        corr_display = corr.rename(index=FEATURE_LABELS, columns=FEATURE_LABELS)
         fig_heat = px.imshow(
-            corr, text_auto=".2f", color_continuous_scale="Blues",
+            corr_display, text_auto=".2f", color_continuous_scale="Blues",
             title="Pearson Correlation Matrix",
             zmin=-1, zmax=1,
         )
